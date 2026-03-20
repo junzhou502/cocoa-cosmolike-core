@@ -90,6 +90,45 @@ struct chis chi_all(const double a)
   return result;
 }
 
+double a_from_chi(const double chi_in)
+{
+  const double chi_dim = chi_in * cosmology.coverH0;
+  if (chi_dim < cosmology.chi[1][0] ||
+      chi_dim > cosmology.chi[1][cosmology.chi_nz-1]){
+        log_fatal(
+          "chi_out_of_range: chi = %g not in [%g, %g]",
+          chi_dim,
+          cosmology.chi[1][0],
+          cosmology.chi[1][cosmology.chi_nz - 1]);
+        exit(1);
+      }
+
+  size_t ilo = 0;
+  size_t ihi = cosmology.chi_nz - 1;
+  while(ihi > ilo + 1)
+  {
+    size_t ll = (ihi + ilo) / 2;
+    if (cosmology.chi[1][ll] > chi_dim)
+      ihi = ll;
+    else
+      ilo = ll;
+  }
+  const size_t j = ilo;
+
+  const double dchi = (chi_dim - cosmology.chi[1][j]) /
+   (cosmology.chi[1][j+1] - cosmology.chi[1][j]);
+  const double z = cosmology.chi[0][j] + dchi*(cosmology.chi[0][j+1] - cosmology.chi[0][j]);
+
+  const double a = 1.0 / (1.0 + z);
+  if (!(a>0.0)|| !(a<1.0))
+  {
+    log_fatal("a_from_chi: 0<a<1 not true, a = %g (z = %g)", a, z);
+    exit(1);
+  }
+
+  return a;
+}
+
 double dchi_dz(const double a)
 {
   return (a*a)*dchi_da(a);

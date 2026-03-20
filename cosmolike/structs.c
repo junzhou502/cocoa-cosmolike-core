@@ -44,7 +44,8 @@ lim limits =
   .M_min = 1.0e+6,              // M_min
   .M_max = 1.0e+17,             // M_max
   .LMIN_tab = 20,               // LMIN_tab
-  .LMAX_NOLIMBER = 150,         // LMAX_NOLIMBER
+  .LMAX_NOLIMBER = 600,         // LMAX_NOLIMBER
+  .Nell_NOLIMBER = 20,
   .cluster_util_log_M_min = 12.0,
   .cluster_util_log_M_max = 15.9,
   .binned_P_lambda_obs_given_M_zmin_table = 0.20,
@@ -107,6 +108,11 @@ void reset_like_struct(void)
   like.ky = 0;
   like.yy = 0;
   like.adopt_limber_gg = 0;
+  like.adopt_limber_gs = 0;
+  like.adopt_RSD_gg = 1;
+  like.adopt_RSD_gs = 1;
+  like.NCell_interpolation = 300;
+  like.Na_interpolation = 225;
 }
 
 void reset_cosmology_struct(void)
@@ -266,6 +272,9 @@ void reset_Ntable_struct(void)
   Ntable.photoz_interpolation_type = 0;
   Ntable.high_def_integration = 0;
   Ntable.FPTboost=0;
+  Ntable.dCX_dlnk_nlnk = 190;
+  Ntable.dCX_dlnk_kmin = 1.e-5;
+  Ntable.dCX_dlnk_kmax = 1.e2;
 }
 
 /*

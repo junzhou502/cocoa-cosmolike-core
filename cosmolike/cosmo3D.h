@@ -21,6 +21,8 @@ struct growths growfac_all(const double a);
 // return chi and dchi_da in a single spline call (faster)
 struct chis chi_all(const double a);
 
+double a_from_chi(const double chi_in);
+
 double norm_growfac(const double a, const bool normalize_z0);
 
 double f_growth(const double z);

@@ -233,7 +233,13 @@ std::tuple<std::string,int> get_baryon_sim_name_and_tag(std::string sim)
 // ---------------------------------------------------------------------------
 // ---------------------------------------------------------------------------
 
-void initial_setup()
+void initial_setup(
+  const int adopt_limber_gg,
+  const int adopt_limber_gs,
+  const int adopt_RSD_gg,
+  const int adopt_RSD_gs,
+  const int NCell_interpolation,
+  const int Na_interpolation)
 {
   static constexpr std::string_view fname = "initial_setup"sv;
   spdlog::cfg::load_env_levels();
@@ -266,7 +272,13 @@ void initial_setup()
   reset_like_struct();
   reset_cmb_struct();
 
-  like.adopt_limber_gg = 0;
+  // plug in
+  like.adopt_limber_gg = adopt_limber_gg;
+  like.adopt_limber_gs = adopt_limber_gs;
+  like.adopt_RSD_gg = adopt_RSD_gg;
+  like.adopt_RSD_gs = adopt_RSD_gs;
+  like.NCell_interpolation = NCell_interpolation;
+  like.Na_interpolation = Na_interpolation;
 
   std::string mode = "Halofit";
   memcpy(pdeltaparams.runmode, mode.c_str(), mode.size() + 1);
@@ -308,10 +320,12 @@ void init_accuracy_boost(
   static int N_a = 0;
   static int N_ell = 0;
 
-  if (0 == N_a) N_a = Ntable.N_a;
+  //if (0 == N_a) N_a = Ntable.N_a;
+  if (0 == N_a) N_a = like.Na_interpolation;
   Ntable.N_a = static_cast<int>(ceil(N_a*accuracy_boost));
   
-  if (0 == N_ell) N_ell = Ntable.N_ell;
+  //if (0 == N_ell) N_ell = Ntable.N_ell;
+  if (0 == N_ell) N_ell = like.NCell_interpolation;
   Ntable.N_ell = static_cast<int>(ceil(N_ell*accuracy_boost));
 
   if (accuracy_boost>1) {
@@ -445,10 +459,13 @@ void init_binning_fourier(
   }
   like.ell = (double*) malloc(sizeof(double)*like.Ncl);
   
+  int cnt = 0;
   for (int i=0; i<like.Ncl; i++) {
     like.ell[i] = std::exp(std::log(like.lmin) + (i + 0.5)*logdl);
-    /*debug(
-        "{}: Bin {:d}, {} = {:d}, {} = {:d} and {} = {:d}",
+    if(like.ell[i]<limits.LMAX_NOLIMBER)
+      cnt++;
+    debug(
+        "{}: Bin {:d}, {} = {:d}, {} = {:.6f} and {} = {:d}",
         "init_binning_fourier",
         i,
         "lmin",
@@ -457,8 +474,9 @@ void init_binning_fourier(
         like.ell[i],
         "lmax",
         lmax
-      );*/
+      );
   }
+  limits.Nell_NOLIMBER = 20;
   debug("{}: {}", fname, errends);
   return;
 }

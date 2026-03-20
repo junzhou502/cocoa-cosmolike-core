@@ -567,7 +567,14 @@ void init_probes(
     std::string possible_probes
   );
 
-void initial_setup();
+void initial_setup(
+  const int adopt_limber_gg,
+  const int adopt_limber_gs,
+  const int adopt_RSD_gg,
+  const int adopt_RSD_gs,
+  const int NCell_interpolation,
+  const int Na_interpolation
+  );
 
 py::tuple read_redshift_distributions_from_files(
     std::string lens_multihisto_file, 
@@ -973,7 +980,7 @@ void compute_X_N_masked(arma::Col<double>& dv, const int start)
           }
           else {
             if (survey.get_mask(index) && (like.ell[i]<like.lmax_shear)) {
-              dv(index) = C_ss_tomo_limber(like.ell[i], z1, z2, 1);
+              dv(index) = C_ss_tomo_limber_nointerp(like.ell[i], z1, z2, 1, 0);
             }
           }
         }
@@ -990,9 +997,9 @@ void compute_X_N_masked(arma::Col<double>& dv, const int start)
           const int index = start + Nlen[N]*nz + i;
           if (survey.get_mask(index)) {
             if constexpr (0 == N)
-              dv(index) = w_gammat_tomo(i,zl,zs,1);
+              dv(index) = w_gammat_tomo(i,zl,zs,like.adopt_limber_gs);
             else
-              dv(index) = C_gs_tomo_limber(like.ell[i], zl, zs);
+              dv(index) = C_gs_tomo_limber_nointerp(like.ell[i], zl, zs, 0);
           }
         }
       }
@@ -1001,16 +1008,46 @@ void compute_X_N_masked(arma::Col<double>& dv, const int start)
   }
   else if constexpr (2 == M) {
     if (1 == like.pos_pos) {
-      for (int nz=0; nz<tomo.clustering_Npowerspectra; nz++) {
-        for (int i=0; i<Nlen[N]; i++) {
-          const int index = start + Nlen[N]*nz + i;
-          if (survey.get_mask(index)) {
-            if constexpr (N == 0) {  
+      for (int nz=0; nz<tomo.clustering_Npowerspectra; nz++) 
+      {
+        if constexpr ( 1 == N)
+        {
+          ///fourier_nonlimber
+          if(0 == like.adopt_limber_gg)
+          {
+            double* ells = (double*)malloc(sizeof(double)*limits.Nell_NOLIMBER);
+            for (int i=0;i<limits.Nell_NOLIMBER;i++)
+              ells[i] = like.ell[i];
+            double* Cl = (double*)malloc(sizeof(double)*limits.Nell_NOLIMBER);
+            C_cl_tomo_nointerp(ells, limits.Nell_NOLIMBER, Cl, nz, nz);
+            for(int i=0;i<limits.Nell_NOLIMBER;i++){
+              const int index = start + Nlen[N]*nz + i;
+              if (survey.get_mask(index))
+                dv(index) = Cl[i];
+            }
+            for(int i=limits.Nell_NOLIMBER;i<Nlen[N];i++){
+              const int index = start + Nlen[N]*nz + i;
+              if (survey.get_mask(index))
+                dv(index) = C_gg_tomo_limber_nointerp(like.ell[i], nz, nz, 0);
+            }
+            free(Cl);
+            free(ells);
+          }
+          else{
+            for (int i=0; i<Nlen[N]; i++) {
+              const int index = start + Nlen[N]*nz + i;
+              if (survey.get_mask(index)) {
+                dv(index) = C_gg_tomo_limber_nointerp(like.ell[i], nz, nz, 0);
+              }
+            }
+          }
+        }
+        else
+        {
+          for (int i=0; i<Nlen[N]; i++) {
+            const int index = start + Nlen[N]*nz + i;
+            if (survey.get_mask(index))
               dv(index) = w_gg_tomo(i, nz, nz, like.adopt_limber_gg);
-            }
-            else {
-              dv(index) = C_gg_tomo_limber(like.ell[i], nz, nz);
-            }
           }
         }
       }

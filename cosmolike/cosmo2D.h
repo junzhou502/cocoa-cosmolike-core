@@ -19,7 +19,13 @@ extern "C" {
 // ----------------------------------------------------------------------------
 // ----------------------------------------------------------------------------
 // ----------------------------------------------------------------------------
-
+double dlnxi_pm_dlnK_tomo(
+    const int pm,
+    const double theta, 
+    const double k_dim,
+    const int ni, 
+    const int nj
+  );
 // ss in real space
 double xi_pm_tomo(
     const int pm, const int nt, const int ni, const int nj, const int limber);
@@ -94,6 +100,12 @@ double C_yy_limber_nointerp(const double l, const int init);
 
 double int_for_C_ss_tomo_limber(double a, void* params);
 
+double int_dlnC_ss_dlnK_tomo_limber(const double l,
+                                    const int n1,
+                                    const int n2,
+                                    const int EE,
+                                    const double k);
+
 double int_for_C_gs_tomo_limber(double a, void* params);
 
 double int_for_C_gg_tomo_limber(double a, void* params);
@@ -121,6 +133,14 @@ double int_for_C_yy_limber(double a, void *params);
 // ----------------------------------------------------------------------------
 
 void C_cl_tomo(int L, int ni, int nj, double *Cl, double dev, double tolerance);
+
+void C_cl_tomo_nointerp(
+    double* ells,
+    int n_ell, 
+    double* Cl,
+    const int ni, 
+    const int nj 
+  );
 
 #ifdef __cplusplus
 }

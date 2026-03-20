@@ -26,7 +26,7 @@
 #include "log.c/src/log.h"
 
 static int include_HOD_GX = 0; // 0 or 1
-static int include_RSD_GS = 0; // 0 or 1 
+static int include_RSD_GS = 1; // 0 or 1 
 static int include_RSD_GG = 1; // 0 or 1 
 static int include_RSD_GK = 0; // 0 or 1
 static int include_RSD_GY = 0; // 0 or 1
@@ -62,6 +62,85 @@ static int has_b2_galaxies(void)
 // ----------------------------------------------------------------------------
 // ----------------------------------------------------------------------------
 // ----------------------------------------------------------------------------
+double dlnxi_pm_dlnK_tomo(
+    const int pm,
+    const double theta, 
+    const double k_dim,
+    const int ni, 
+    const int nj
+  )
+{  
+  static double** Glpm = NULL; //Glpm[0] = Gl+, Glpm[1] = Gl-
+  static double* P = NULL;
+  static double cache_theta = 0;
+  const double x = cos(theta*2.90888208665721580e-4);
+  const int lmin = 2;
+
+  if (NULL == Glpm || NULL == P || 0 == cache_theta || fdiff(cache_theta, theta))
+  {
+    if (Glpm != NULL) {
+      free(Glpm);
+    }
+    if (P != NULL) {
+      free(P);
+    }
+
+    Glpm = (double**) malloc2d(2, Ntable.LMAX + 1);
+
+    for (int l=0; l<lmin; l++) {
+      Glpm[0][l] = 0.0;
+      Glpm[1][l] = 0.0;
+    }
+      
+    P = (double*) malloc1d(Ntable.LMAX + 1);
+    for (int l=0; l<lmin; l++)
+      P[l] = 0;
+    for (int l=lmin; l<=Ntable.LMAX;l++)
+      P[l] = gsl_sf_legendre_Plm(l, 2, x);
+
+    for (int l=lmin; l<=Ntable.LMAX; l++) {
+      double pref = (2.*l+1)/(2.*M_PI*l*l*(l+1)*(l+1));
+      Glpm[0][l] = -((l-2*2)/(1-x*x) + 0.5*l*(l-1))*P[l]
+                    +(l+2)*(x/(1-x*x))*P[l-1];
+      Glpm[1][l] = 2*((l-1)*x/(1-x*x)*P[l]
+                   -(l+2)/(1-x*x)*P[l-1]);
+      Glpm[0][l] *= pref;
+      Glpm[1][l] *= pref;
+    }
+
+    cache_theta = theta;
+  }
+
+  double** Clint = (double**) malloc2d(2, Ntable.LMAX + 1);
+  const double l_phy = cosmology.chi[1][cosmology.chi_nz-1]*k_dim - 0.5;
+  const int l_max = (int) (l_phy < Ntable.LMAX) ? l_phy : Ntable.LMAX;
+
+  for (int l=0; l<l_max; l++) {
+    Clint[0][l] = int_dlnC_ss_dlnK_tomo_limber(l, ni, nj, 1, k_dim);
+    Clint[1][l] = 0.0;
+  }
+
+  if (ni < 0 || 
+    ni > redshift.shear_nbin - 1 || 
+    nj < 0 || 
+    nj > redshift.shear_nbin - 1)
+  {
+    log_fatal("error in selecting bin number (ni, nj) = [%d,%d]", ni, nj);
+    exit(1);
+  }
+  double sum0 = 0.0;
+  double sum1 = 0.0;
+  for (int l=lmin; l<l_max; l++) {
+    const double c0 = Clint[0][l];
+    const double c1 = Clint[1][l];
+    sum0 += Glpm[0][l] * (c0 + c1);
+    sum1 += Glpm[1][l] * (c0 - c1);
+  }
+
+  free(Clint);
+  return (pm > 0) ? sum0 : sum1;
+
+}
 
 double xi_pm_tomo(
     const int pm, 
@@ -867,6 +946,55 @@ double w_ks_tomo(const int nt, const int ni, const int limber)
 // ----------------------------------------------------------------------------
 // ----------------------------------------------------------------------------
 
+double int_dlnC_ss_dlnK_tomo_limber(const double l,
+                                    const int n1,
+                                    const int n2,
+                                    const int EE,
+                                    const double k_dim)
+{
+  const double ell = l + 0.5;
+  const double chi_dim = ell/k_dim;
+
+  const double chi_min = cosmology.chi[1][0];
+  const double chi_max = cosmology.chi[1][cosmology.chi_nz-1];
+
+  if (chi_dim < chi_min || chi_dim > chi_max) {
+    return 0.0;
+  }
+
+  const double a = a_from_chi(chi_dim/cosmology.coverH0);
+  struct chis chidchi = chi_all(a);
+  const double growfac_a = growfac(a);
+  const double hoverh0 = hoverh0v2(a, chidchi.dchida);
+  const double fK = f_K(chidchi.chi);
+  const double k = ell/fK;
+  
+  const double WK1 = W_kappa(a, fK, n1);
+  const double WK2 = W_kappa(a, fK, n2);
+  const double WS1 = W_source(a, n1, hoverh0);
+  const double WS2 = W_source(a, n2, hoverh0);
+  const double PK  = Pdelta(k,a);
+
+  const double ell4 = ell*ell*ell*ell; // correction (1812.05995 eqs 74-79)
+  const double ell_prefactor = l*(l - 1.)*(l + 1.)*(l + 2.)/ell4;
+  double ans;
+  if (EE == 1) { 
+        double IA_A1[2];
+        IA_A1_Z1Z2(a, growfac_a, n1, n2, IA_A1);
+        const double C11 = IA_A1[0];
+        const double C12 = IA_A1[1];
+        ans =   WK1*WK2*PK 
+              - WS1*WK2*C11*PK 
+              - WS2*WK1*C12*PK
+              + WS1*WS2
+              *C11*C12*PK;
+      }
+  else {
+        ans = 0.0;
+      }
+  return ans*k*ell_prefactor/ell;
+}
+
 double int_for_C_ss_tomo_limber(double a, void* params)
 {
   if (!(a>0) || !(a<1)) {
@@ -887,6 +1015,7 @@ double int_for_C_ss_tomo_limber(double a, void* params)
   }
   const double l = ar[2];
   const int EE = (int) ar[3];
+  //const int deriv = (int) ar[4];
 
   const double ell = l + 0.5;
   struct chis chidchi = chi_all(a);
@@ -1002,8 +1131,19 @@ double int_for_C_ss_tomo_limber(double a, void* params)
       exit(1);
     }
   }
-
+  
   return ans*(chidchi.dchida/(fK*fK))*ell_prefactor;
+
+}
+
+double dlnC_ss_dlnK_tomo(
+    const double l,
+    const int ni,
+    const int nj,
+    const int EE,
+    const int limber
+){
+  
 }
 
 double C_ss_tomo_limber_nointerp(
@@ -1200,13 +1340,13 @@ double int_for_C_gs_tomo_limber(double a, void* params)
         g4*interpol1d(FPTIA.tab[3], FPTIA.N, lim[0], lim[1], lim[2], lnk);
 
       double WRSD = 0.0;
-      if (include_RSD_GS == 1)
+      if (like.adopt_RSD_gs == 1)
       {
         const double chi_0 = f_K(ell/k);
         const double chi_1 = f_K((ell+1.)/k);
         const double a_0 = a_chi(chi_0);
         const double a_1 = a_chi(chi_1);
-        WRSD = W_RSD(ell, a_0, a_1, nl);
+        WRSD = W_RSD(l, a_0, a_1, nl);
       }
 
       double oneloop = 0.0;
@@ -1253,13 +1393,13 @@ double int_for_C_gs_tomo_limber(double a, void* params)
       }
 
       double WRSD = 0.0;
-      if (include_RSD_GS == 1)
+      if (like.adopt_RSD_gs == 1)
       {
         const double chi_0 = f_K(ell/k);
         const double chi_1 = f_K((ell+1.)/k);
         const double a_0 = a_chi(chi_0);
         const double a_1 = a_chi(chi_1);
-        WRSD = W_RSD(ell, a_0, a_1, nl);
+        WRSD = W_RSD(l, a_0, a_1, nl);
       }
 
       double oneloop = 0.0;
@@ -1470,7 +1610,7 @@ double int_for_C_gg_tomo_limber(double a, void* params)
   
   if (include_HOD_GX == 1)
   {
-    if (include_RSD_GG == 1)
+    if (like.adopt_RSD_gg == 1)
     {
       log_fatal("RSD not implemented with (HOD = TRUE)");
       exit(1);
@@ -1481,7 +1621,7 @@ double int_for_C_gg_tomo_limber(double a, void* params)
   }
   else
   {
-    if(include_RSD_GG == 1)
+    if(like.adopt_RSD_gg == 1)
     {
       const double chi_a_min = chi(limits.a_min);
       const double chi_0 = f_K(ell/k);
@@ -1490,7 +1630,7 @@ double int_for_C_gg_tomo_limber(double a, void* params)
       
       const double a_0 = a_chi(chi_0);
       const double a_1 = a_chi(chi_1);
-      const double WRSDi =  W_RSD(ell, a_0, a_1, ni);
+      const double WRSDi =  W_RSD(l, a_0, a_1, ni);
 
       res *= (WGALi*b1i + WMAGi*ell_prefactor*bmagi + WRSDi);
       res *= (WGALi*b1i + WMAGi*ell_prefactor*bmagi + WRSDi);
@@ -1752,7 +1892,7 @@ double int_for_C_gk_tomo_limber(double a, void* params)
       const double chi_1 = f_K((ell+1.)/k);
       const double a_0 = a_chi(chi_0);
       const double a_1 = a_chi(chi_1);
-      const double WRSD = W_RSD(ell, a_0, a_1, nl);
+      const double WRSD = W_RSD(l, a_0, a_1, nl);
 
       res *= WGAL*b1 + WMAG*ell_prefactor*bmag + WRSD;
     }
@@ -2736,7 +2876,8 @@ void C_cl_tomo(
     cfftlog_ells(f1_chi[3], f1_chi[0], Ntable.NL_Nchi, &cfg, ell_ar, 
                  Ntable.NL_Nell_block, Fk1[2], Fk1[0]);
     
-    cfftlog_ells_increment(f1_chi[3], f1_chi[1], Ntable.NL_Nchi, &cfg_RSD, 
+    if(like.adopt_RSD_gg == 1)
+      cfftlog_ells_increment(f1_chi[3], f1_chi[1], Ntable.NL_Nchi, &cfg_RSD, 
                            ell_ar, Ntable.NL_Nell_block, Fk1[2], Fk1[0]);   
     
     cfftlog_ells(f1_chi[3], f1_chi[2], Ntable.NL_Nchi, &cfg_Mag, ell_ar, 
@@ -2778,4 +2919,127 @@ void C_cl_tomo(
   free(Fk1);
   free(f1_chi);
   free(ell_ar);
+}
+
+
+void C_cl_tomo_nointerp(
+    double* ells,
+    int n_ell, 
+    double* Cl,
+    const int ni, 
+    const int nj 
+  )
+{
+  if (ni < -1 || ni > redshift.clustering_nbin - 1 || 
+      nj < -1 || nj > redshift.clustering_nbin - 1)
+  {
+    log_fatal("error in selecting bin number (ni, nj) = [%d,%d]", ni, nj);
+    exit(1);
+  }
+  if (ni != nj)
+  {
+    log_fatal("Cocoa disabled cross-spectrum w_gg");
+    exit(1);
+  }
+    
+  const double real_coverH0 = cosmology.coverH0/cosmology.h0;
+  const double chi_min = chi(1./(1.0 + 0.002))*real_coverH0; // DIMENSIONELESS
+  const double chi_max = chi(1./(1.0 + 4.0))*real_coverH0;   // DIMENSIONELESS
+  const double dlnchi = log(chi_max/chi_min) / ((double) Ntable.NL_Nchi - 1.0);
+  const double dlnk = dlnchi;
+
+  Ntable.NL_Nell_block = n_ell;
+  double* ell_ar = ells;
+  double*** Fk1 = (double***) malloc3d(3, Ntable.NL_Nell_block, Ntable.NL_Nchi); // (Fk1, Fk1_Mag, k1)    
+  double** f1_chi = (double**) malloc2d(4, Ntable.NL_Nchi); // (f1, f1_RSD, f1_MAG, chi)
+
+
+  #pragma omp parallel for
+  for (int i=0; i<Ntable.NL_Nchi; i++)
+  {
+    f1_chi[3][i] = chi_min * exp(dlnchi * i); 
+    const double a = a_chi(f1_chi[3][i]/real_coverH0);
+    const double z = 1. / a - 1.;
+    
+    if (z < redshift.clustering_zdist_zmin[ni] || 
+        z > redshift.clustering_zdist_zmax[ni]) { 
+      f1_chi[0][i] = 0.;
+      f1_chi[1][i] = 0.;
+      f1_chi[2][i] = 0.;
+    }
+    else {
+      const double pf = pf_photoz(z,ni);
+      const double hoverh0_a = hoverh0(a);
+      const double fK = f_K(f1_chi[3][i]/real_coverH0); 
+      const double WM = W_mag(a, fK, ni);
+      struct growths growfac_a = growfac_all(a);
+      const double D = growfac_a.D;
+      const double f = growfac_a.f;
+
+      f1_chi[0][i] = gb1(z, ni)*f1_chi[3][i]*pf*D*hoverh0_a/real_coverH0;
+      f1_chi[1][i] = -f1_chi[3][i]*pf*D*f*hoverh0_a/real_coverH0;
+      f1_chi[2][i] = (WM/fK/(real_coverH0*real_coverH0)) * D; // [Mpc^-2] 
+    }
+  }
+
+  config cfg;
+  cfg.nu = 1.;
+  cfg.c_window_width = 0.25;
+  cfg.derivative = 0;
+  cfg.N_pad = 200;
+  cfg.N_extrap_low = 0;
+  cfg.N_extrap_high = 0;
+
+  config cfg_RSD;
+  cfg_RSD.nu = 1.01;
+  cfg_RSD.c_window_width = 0.25;
+  cfg_RSD.derivative = 2;
+  cfg_RSD.N_pad = 500;
+  cfg_RSD.N_extrap_low = 0;
+  cfg_RSD.N_extrap_high = 0;
+
+  config cfg_Mag;
+  cfg_Mag.nu = 1.;
+  cfg_Mag.c_window_width = 0.25;
+  cfg_Mag.derivative = 0;
+  cfg_Mag.N_pad = 500;
+  cfg_Mag.N_extrap_low = 0;
+  cfg_Mag.N_extrap_high = 0;
+
+  //VM: TODO - I can combine these 3 functions in one and thread them w/ OpenMP
+  cfftlog_ells_double(f1_chi[3], f1_chi[0], Ntable.NL_Nchi, &cfg, ell_ar, 
+                Ntable.NL_Nell_block, Fk1[2], Fk1[0]);
+  
+  if(like.adopt_RSD_gg == 1)
+    cfftlog_ells_increment_double(f1_chi[3], f1_chi[1], Ntable.NL_Nchi, &cfg_RSD, 
+                          ell_ar, Ntable.NL_Nell_block, Fk1[2], Fk1[0]);   
+  
+  cfftlog_ells_double(f1_chi[3], f1_chi[2], Ntable.NL_Nchi, &cfg_Mag, ell_ar, 
+                Ntable.NL_Nell_block, Fk1[2], Fk1[1]);    
+  
+  { // init static variables inside the C_XY_limber_nointerp function
+    (void) p_lin(Fk1[2][0][0]*real_coverH0, 1.0);
+    (void) C_gg_tomo_limber_nointerp((double) 100, 0, 0, 1);
+  }
+
+  #pragma omp parallel for
+  for (int i=0; i<Ntable.NL_Nell_block; i++)
+  {
+    const double ell_prefactor = ell_ar[i] * (ell_ar[i] + 1.);
+
+    double cl_temp = 0.;
+    //#pragma omp parallel for reduction(+:cl_temp)
+    for (int j=0; j<Ntable.NL_Nchi; j++) {
+      Fk1[0][i][j] += gbmag(0.0, ni)*ell_prefactor*Fk1[1][i][j]/(Fk1[2][i][j]*Fk1[2][i][j]);
+      const double k1cH0 = Fk1[2][i][j] * real_coverH0;
+      cl_temp += Fk1[0][i][j]*Fk1[0][i][j]*(k1cH0*k1cH0*k1cH0)*p_lin(k1cH0,1);
+    }
+    
+    Cl[i] = cl_temp * dlnk * 2. / M_PI + 
+        C_gg_tomo_limber_linpsopt_nointerp((double) ell_ar[i], ni, nj, 0, 0)
+      -C_gg_tomo_limber_linpsopt_nointerp((double) ell_ar[i], ni, nj, 1, 0);
+  }
+
+  free(Fk1);
+  free(f1_chi);
 }

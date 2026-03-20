@@ -19,6 +19,7 @@ typedef struct
   double M_max;
   int LMIN_tab;
   int LMAX_NOLIMBER;
+  int Nell_NOLIMBER;
   // ---------------------------------------------------
   // CLUSTER ROUTINES (ALPHA STAGE)
   // ---------------------------------------------------
@@ -81,6 +82,14 @@ typedef struct
   // ---------------------------------------------------
   // ---------------------------------------------------
   int high_def_integration;
+  // ---------------------------------------------------
+  // ---------------------------------------------------
+  // CONTROL NUM POINTS EVALUATED ON LIMBER DERIVATIVES
+  // ---------------------------------------------------
+  // ---------------------------------------------------
+  int dCX_dlnk_nlnk;
+  double dCX_dlnk_kmin;
+  double dCX_dlnk_kmax;
   // ---------------------------------------------------
   // ---------------------------------------------------
   // CONTROL NUM POINTS EVALUATED BY FASPT
@@ -299,6 +308,11 @@ typedef struct
   int clusterCG;
   int clusterCC;
   int adopt_limber_gg;
+  int adopt_limber_gs;
+  int adopt_RSD_gg;
+  int adopt_RSD_gs;
+  int NCell_interpolation;
+  int Na_interpolation;
   int use_ggl_efficiency_zoverlap;
   // ---------------------------------------------------
   // ---------------------------------------------------
