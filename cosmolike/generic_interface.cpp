@@ -234,8 +234,9 @@ std::tuple<std::string,int> get_baryon_sim_name_and_tag(std::string sim)
 // ---------------------------------------------------------------------------
 
 void initial_setup(
-  const int adopt_limber_gg,
-  const int adopt_limber_gs,
+  const int implement_bin_average,
+  const int LMAX_NOLIMBER,
+  const int adopt_nolimber_gg,
   const int adopt_RSD_gg,
   const int adopt_RSD_gs,
   const int NCell_interpolation,
@@ -273,12 +274,13 @@ void initial_setup(
   reset_cmb_struct();
 
   // plug in
-  like.adopt_limber_gg = adopt_limber_gg;
-  like.adopt_limber_gs = adopt_limber_gs;
+  like.implement_bin_average = implement_bin_average;
+  like.adopt_nolimber_gg = adopt_nolimber_gg;
   like.adopt_RSD_gg = adopt_RSD_gg;
   like.adopt_RSD_gs = adopt_RSD_gs;
   like.NCell_interpolation = NCell_interpolation;
   like.Na_interpolation = Na_interpolation;
+  limits.LMAX_NOLIMBER = LMAX_NOLIMBER;
 
   std::string mode = "Halofit";
   memcpy(pdeltaparams.runmode, mode.c_str(), mode.size() + 1);
@@ -476,7 +478,7 @@ void init_binning_fourier(
         lmax
       );
   }
-  limits.Nell_NOLIMBER = 20;
+  limits.Nell_NOLIMBER = cnt;
   debug("{}: {}", fname, errends);
   return;
 }

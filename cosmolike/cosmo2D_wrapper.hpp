@@ -59,8 +59,6 @@ arma::Col<double> get_binning_real_space();
 
 arma::Col<double> get_binning_fourier_space();
 
-py::tuple dlnxi_pm_dlnK_tomo_cpp(const double theta, const arma::Col<double> k);
-
 pybind11::tuple xi_pm_tomo_cpp();
 
 arma::Cube<double> w_gammat_tomo_cpp();

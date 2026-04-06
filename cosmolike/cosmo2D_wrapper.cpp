@@ -92,29 +92,6 @@ arma::Col<double> get_binning_fourier_space()
 // ---------------------------------------------------------------------------
 // ---------------------------------------------------------------------------
 // ---------------------------------------------------------------------------
-py::tuple dlnxi_pm_dlnK_tomo_cpp(const double theta, const arma::Col<double> k)
-{ 
-  arma::Cube<double> xp(k.n_elem,
-                        redshift.shear_nbin,
-                        redshift.shear_nbin,
-                        arma::fill::zeros);
-  arma::Cube<double> xm(k.n_elem,
-                        redshift.shear_nbin,
-                        redshift.shear_nbin,
-                        arma::fill::zeros);
-
-  for (int nz=0; nz<tomo.shear_Npowerspectra; nz++) {    
-    for (int i=0; i<k.n_elem; i++) {
-      const int z1 = Z1(nz);
-      const int z2 = Z2(nz);
-      xp(i,z1,z2) = dlnxi_pm_dlnK_tomo(1, theta, k(i), z1, z2);
-      xm(i,z1,z2) = dlnxi_pm_dlnK_tomo(-1, theta,k(i), z1, z2);
-      xp(i,z2,z1) = xp(i,z1,z2);
-      xm(i,z2,z1) = xm(i,z1,z2);
-    }
-  }
-  return py::make_tuple(carma::cube_to_arr(xp), carma::cube_to_arr(xm));
-}
 
 py::tuple xi_pm_tomo_cpp()
 { 

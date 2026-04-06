@@ -568,8 +568,9 @@ void init_probes(
   );
 
 void initial_setup(
-  const int adopt_limber_gg,
-  const int adopt_limber_gs,
+  const int implement_bin_average,
+  const int LMAX_NOLIMBER,
+  const int adopt_nolimber_gg,
   const int adopt_RSD_gg,
   const int adopt_RSD_gs,
   const int NCell_interpolation,
@@ -997,7 +998,7 @@ void compute_X_N_masked(arma::Col<double>& dv, const int start)
           const int index = start + Nlen[N]*nz + i;
           if (survey.get_mask(index)) {
             if constexpr (0 == N)
-              dv(index) = w_gammat_tomo(i,zl,zs,like.adopt_limber_gs);
+              dv(index) = w_gammat_tomo(i,zl,zs,1);
             else
               dv(index) = C_gs_tomo_limber_nointerp(like.ell[i], zl, zs, 0);
           }
@@ -1013,7 +1014,7 @@ void compute_X_N_masked(arma::Col<double>& dv, const int start)
         if constexpr ( 1 == N)
         {
           ///fourier_nonlimber
-          if(0 == like.adopt_limber_gg)
+          if(1 == like.adopt_nolimber_gg)
           {
             double* ells = (double*)malloc(sizeof(double)*limits.Nell_NOLIMBER);
             for (int i=0;i<limits.Nell_NOLIMBER;i++)
@@ -1047,7 +1048,7 @@ void compute_X_N_masked(arma::Col<double>& dv, const int start)
           for (int i=0; i<Nlen[N]; i++) {
             const int index = start + Nlen[N]*nz + i;
             if (survey.get_mask(index))
-              dv(index) = w_gg_tomo(i, nz, nz, like.adopt_limber_gg);
+              dv(index) = w_gg_tomo(i, nz, nz, (!like.adopt_nolimber_gg));
           }
         }
       }
